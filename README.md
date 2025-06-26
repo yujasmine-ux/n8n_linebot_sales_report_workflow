@@ -6,7 +6,8 @@
 
 ### 一鍵部署到 Render
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=hhttps://github.com/yujasmine-ux/n8n_linebot_sales_report_workflow)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/yujasmine-ux/n8n_linebot_sales_report_workflow&branch=main)
+
 
 ### 環境變數設定（Render > Environment）
 
