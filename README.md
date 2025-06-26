@@ -6,7 +6,7 @@
 
 ### 一鍵部署到 Render
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/你的帳號/n8n-line-webhook)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/yujasmine-ux/n8n-linebot-sales-report-webhook)
 
 ### 環境變數設定（Render > Environment）
 
