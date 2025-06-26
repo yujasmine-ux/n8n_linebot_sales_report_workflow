@@ -1,0 +1,356 @@
+{
+  "name": "白名單My workflow 8",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const rows = $items().map(item => item.json);\n\n// 今日日期\nconst today = new Date().toISOString().slice(0, 10).replace(/-/g, '');\n\n// 過濾今日資料\nconst todayRows = rows.filter(r => r[\"銷/退日期\"] === today);\n\n// 今日統計\nconst totalRevenue = todayRows.reduce((sum, row) => sum + (parseFloat(row[\"小計\"]) || 0), 0);\nconst uniqueOrders = new Set(todayRows.map(row => row[\"銷貨單號\"])).size;\n\n// 門市與商品統計\nconst stores = {};\nconst products = {};\n\nfor (const row of todayRows) {\n  const store = row[\"門市名稱\"]?.trim() || \"未知門市\";\n  const product = row[\"商品名稱\"]?.trim() || \"未知商品\";\n  const isReturn = row[\"狀態\"]?.includes(\"退\");\n  const qty = parseFloat(row[\"數量\"]) || 0;\n  const amount = parseFloat(row[\"小計\"]) || 0;\n\n  if (!stores[store]) stores[store] = { count: 0, amount: 0 };\n  stores[store].count += 1;\n  stores[store].amount += amount;\n\n  if (!products[product]) {\n    products[product] = { saleQty: 0, saleAmount: 0, returnQty: 0, returnAmount: 0 };\n  }\n  if (isReturn) {\n    products[product].returnQty += qty;\n    products[product].returnAmount += amount;\n  } else {\n    products[product].saleQty += qty;\n    products[product].saleAmount += amount;\n  }\n}\n\n// 銷售排行\nconst topProducts = Object.entries(products)\n  .sort((a, b) => b[1].saleAmount - a[1].saleAmount)\n  .slice(0, 3)\n  .map(([name, stat], idx) => `${idx + 1}. ${name}：${stat.saleAmount.toLocaleString()} 元`);\n\n// 建立訊息陣列\nconst summary = [\n  `📆 今日銷售日期：${today.slice(0,4)}/${today.slice(4,6)}/${today.slice(6,8)}`,\n  `💰 營收總額：${totalRevenue.toLocaleString()} 元`,\n  `📦 訂單總數：${uniqueOrders} 筆`,\n  \"\",\n  \"🏪 各門市銷售：\",\n  ...Object.entries(stores).map(\n    ([store, stat]) => `🔹 ${store}: ${stat.amount.toLocaleString()} 元 / ${stat.count} 筆`\n  ),\n  \"\",\n  \"🏆 銷售排行榜（依金額）：\",\n  ...topProducts\n];\n\n// 輸出 LINE 回覆格式\nreturn [\n  {\n    json: {\n      replyToken: $json.replyToken,\n      messageText: summary.join('\\n')\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -60
+      ],
+      "name": "[Function] 統計與組成訊息",
+      "id": "bcfa5a31-bc29-4ee0-94d4-5d8cc47e9463"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DECLARE @QueryDate1 DATE = CAST(GETDATE() - 1 AS DATE),\n        @QueryDate2 DATE = CAST(GETDATE() AS DATE);\n\nSELECT *\nFROM F0052\nWHERE DATE1 BETWEEN @QueryDate1 AND @QueryDate2;\n\n(SELECT \n    F0052.OFFNO AS 門市編號, \n    ISNULL(F0058.INVNO, '') AS 發票號碼, \n    ISNULL(F0058.CARRIERID1, '') AS 載具號碼, \n    F0052.DATE1 AS '銷/退日期', \n    '銷售' AS 狀態, \n    F0051.WNO AS 機, \n    F0051.CUSTNO AS 會員編號, \n    ISNULL(F0015.CUSTNA, '') AS 會員名稱, \n    ISNULL(F0015.MOBILE, '') AS 電話, \n    F0051.CARNO AS '車號', \n    F0051.TAXID AS 統一編號, \n    F0051.INTRNO AS 介紹人, \n    ISNULL(F0066.INTRNA, '') AS 介紹人姓名, \n    F0065.SURNA AS 客戶來源, \n    F0049.SERNA AS '服務大類', \n    F0002.KIND1C AS 大類名稱, \n    F0001.PRNO AS 商品編號, \n    F0001.PRNA AS 商品名稱, \n    '應稅' AS 稅別, \n    F0052.MONEY1 AS 單價, \n    F0052.QTY1 AS 數量, \n    F0052.BPER AS 折扣率, \n    F0052.MONEY1 * F0052.QTY1 AS 小計,\n    (SELECT STNA FROM F0014 AS f14 WHERE f14.STNO = F0051.STNO1) AS 銷售員工, \n    ISNULL((SELECT STNA FROM F0014 AS f14 WHERE f14.STNO = F0051.STNO2), '') AS 退貨員工, \n    F0052.SALNO AS 銷貨單號, \n    ISNULL(F0015.NOTE1, '') AS 會員備註, \n    F0051.NOTE2 AS 訂單備註, \n    F0004.OFFNA AS 門市名稱\nFROM F0052 \n    LEFT OUTER JOIN F0051 ON F0051.SALNO = F0052.SALNO \n    LEFT OUTER JOIN F0058 ON F0058.SALNO = F0052.SALNO \n    LEFT OUTER JOIN F0066 ON F0051.INTRNO = F0066.INTRNO \n    LEFT OUTER JOIN F0015 ON F0015.CUSTNO = F0051.CUSTNO \n    LEFT OUTER JOIN F0001 ON F0001.PRNO = F0052.PRNO \n    LEFT OUTER JOIN F0002 ON F0002.KIND1 = F0001.KIND1 AND F0002.KIND0 = '2' \n    LEFT OUTER JOIN F0004 ON F0052.OFFNO = F0004.OFFNO\n    LEFT JOIN F0065 ON F0065.SURNO = F0051.SURNO\n    LEFT JOIN F0049 ON F0049.SERNO = F0051.SERNO\nWHERE F0052.DATE1 >= @QueryDate1 AND F0052.DATE1 <= @QueryDate2\nUNION ALL\nSELECT \n    F0052.OFFNO AS 門市編號, \n    ISNULL(F0058.INVNO, '') AS 發票號碼, \n    ISNULL(F0058.CARRIERID1, '') AS 載具號碼, \n    F0052.DATE2 AS '銷/退日期', \n    '銷退' AS 狀態, \n    F0051.WNO AS 機, \n    F0051.CUSTNO AS 會員編號, \n    ISNULL(F0015.CUSTNA, '') AS 會員名稱, \n    ISNULL(F0015.MOBILE, '') AS 電話, \n    F0051.CARNO AS '車號', \n    F0051.TAXID AS 統一編號, \n    F0051.INTRNO AS 介紹人, \n    ISNULL(F0066.INTRNA, '') AS 介紹人姓名, \n    F0065.SURNA AS 客戶來源, \n    F0049.SERNA AS '服務大類', \n    F0002.KIND1C AS 大類名稱, \n    F0001.PRNO AS 商品編號, \n    F0001.PRNA AS 商品名稱, \n    '應稅' AS 稅別, \n    F0052.MONEY1 AS 單價, \n    -F0052.QTY1 AS 數量, \n    F0052.BPER AS 折扣率, \n    F0052.MONEY1 * (-F0052.QTY1) AS 小計,\n    (SELECT STNA FROM F0014 AS f14 WHERE f14.STNO = F0051.STNO1) AS 銷售員工, \n    ISNULL((SELECT STNA FROM F0014 AS f14 WHERE f14.STNO = F0051.STNO2), '') AS 退貨員工, \n    F0052.SALNO AS 銷貨單號, \n    ISNULL(F0015.NOTE1, '') AS 會員備註, \n    F0051.NOTE2 AS 訂單備註, \n    F0004.OFFNA AS 門市名稱\nFROM F0052 \n    LEFT OUTER JOIN F0051 ON F0051.SALNO = F0052.SALNO \n    LEFT OUTER JOIN F0058 ON F0058.SALNO = F0052.SALNO \n    LEFT OUTER JOIN F0066 ON F0051.INTRNO = F0066.INTRNO \n    LEFT OUTER JOIN F0015 ON F0015.CUSTNO = F0051.CUSTNO \n    LEFT OUTER JOIN F0001 ON F0001.PRNO = F0052.PRNO \n    LEFT OUTER JOIN F0002 ON F0002.KIND1 = F0001.KIND1 AND F0002.KIND0 = '2' \n    LEFT OUTER JOIN F0004 ON F0052.OFFNO = F0004.OFFNO\n    LEFT JOIN F0065 ON F0065.SURNO = F0051.SURNO\n    LEFT JOIN F0049 ON F0049.SERNO = F0051.SERNO\nWHERE F0052.DATE2 >= @QueryDate1 AND F0052.DATE2 <= @QueryDate2)\nORDER BY [銷/退日期];"
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        -60
+      ],
+      "name": "[SQL] 查詢 MSSQL 業績報表",
+      "id": "fdd55501-17f6-4387-b7db-ea44d69f885c",
+      "credentials": {
+        "microsoftSql": {
+          "id": "DrgwzkTpiUUyiwK5",
+          "name": "總公司權限"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{ $('[Function] 擷取訊息與儲存回覆 token').first().json.replyToken }}\",\n  \"messages\": {{ JSON.stringify($json.replyMessages) }}\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        400,
+        -260
+      ],
+      "name": "[LINE] 回覆業績訊息",
+      "id": "3dc88494-ce4a-4ee1-b3fa-edf477813045",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9pqIVfx96m4VR0F3",
+          "name": "lineapi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.messageText }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        20,
+        140
+      ],
+      "id": "19cdc9f0-b356-48ac-9205-216993465159",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "cityName": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('City', `City必須轉成英文`, 'string') }}",
+        "language": "zh-tw"
+      },
+      "type": "n8n-nodes-base.openWeatherMapTool",
+      "typeVersion": 1,
+      "position": [
+        220,
+        400
+      ],
+      "id": "f6389a18-bc8a-4408-a6bd-c317be449afb",
+      "name": "OpenWeatherMap1",
+      "credentials": {
+        "openWeatherMapApi": {
+          "id": "dnRqbJvjcorXokit",
+          "name": "OpenWeatherMap account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite-preview-06-17",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        40,
+        400
+      ],
+      "id": "3e4c42a2-77b7-486b-a3fb-08fef8874ff1",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "R3U4r1RXFgV8BVwp",
+          "name": "Google Gemini(PaLM) Api account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{ $('[Function] 擷取訊息與儲存回覆 token').first().json.replyToken }}\",\n  \"messages\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"{{ $('AI Agent').first().json.output }}\"\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        500,
+        180
+      ],
+      "name": "[LINE] 回覆非關鍵詞訊息",
+      "id": "2e598682-25d0-4097-8b7d-33bf5d22a377",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9pqIVfx96m4VR0F3",
+          "name": "lineapi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "if (!$json.replyToken) {\n  throw new Error(\"無法取得 replyToken，請確認上一個節點的輸出結構是否正確。\");\n}\n\nreturn [{\n  json: {\n    replyToken: $json.replyToken,\n    messageText: `請輸入『業績報表』查詢，或說明您想知道的內容，例如『天氣』。`\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        180
+      ],
+      "name": "[Function] 非關鍵詞預設回覆",
+      "id": "5c879ee3-f798-4c17-bb80-a37fb345e739"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.messageText }}",
+              "value2": "業績報表"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        60
+      ],
+      "name": "[IF] 是否為 '業績報表'",
+      "id": "24f4e238-e6ee-4bc5-a150-5c9fdf3f41c1"
+    },
+    {
+      "parameters": {
+        "functionCode": "const event = $json.body?.events?.[0] || {};\nreturn [{\n  json: {\n    replyToken: event.replyToken,\n    messageText: event.message?.text || ''\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -680,
+        60
+      ],
+      "name": "[Function] 擷取訊息與儲存回覆 token",
+      "id": "82e27c63-4e2a-4f69-854d-cd1663664ed2"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-webhook",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        60
+      ],
+      "name": "[Webhook] 接收 LINE 請求",
+      "id": "90bac319-4f03-49bd-85e1-7fb1e3060dca",
+      "webhookId": "line-webhook-id"
+    },
+    {
+      "parameters": {
+        "functionCode": "const fullText = $json.messageText || '';\nconst MAX_LEN = 2000;\n\nconst segments = [];\nfor (let i = 0; i < fullText.length; i += MAX_LEN) {\n  segments.push({\n    type: 'text',\n    text: fullText.slice(i, i + MAX_LEN)\n  });\n}\n\nreturn {\n  replyMessages: segments.slice(0, 5),\n  pushMessages: segments.slice(5)\n};\n"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        160,
+        -260
+      ],
+      "name": "[Function]分段訊息",
+      "id": "12709e0c-9ce6-4635-89ed-9452a0c7e0c2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "[Function] 統計與組成訊息": {
+      "main": [
+        [
+          {
+            "node": "[Function]分段訊息",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[SQL] 查詢 MSSQL 業績報表": {
+      "main": [
+        [
+          {
+            "node": "[Function] 統計與組成訊息",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "[LINE] 回覆非關鍵詞訊息",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenWeatherMap1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Function] 非關鍵詞預設回覆": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[IF] 是否為 '業績報表'": {
+      "main": [
+        [
+          {
+            "node": "[SQL] 查詢 MSSQL 業績報表",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Function] 非關鍵詞預設回覆",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Function] 擷取訊息與儲存回覆 token": {
+      "main": [
+        [
+          {
+            "node": "[IF] 是否為 '業績報表'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Webhook] 接收 LINE 請求": {
+      "main": [
+        [
+          {
+            "node": "[Function] 擷取訊息與儲存回覆 token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Function]分段訊息": {
+      "main": [
+        [
+          {
+            "node": "[LINE] 回覆業績訊息",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[LINE] 回覆業績訊息": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c9aa5b27-fbd3-4407-9349-458cab84a848",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "258b459c1f0a0a24ea42487c9f57f845106a0c6e3e08b4efa1613f3c80e33eb8"
+  },
+  "id": "CCQU7cij9nyr9B46",
+  "tags": []
+}
